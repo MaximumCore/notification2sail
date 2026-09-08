@@ -16,10 +16,14 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.transition.AutoTransition
 import android.transition.TransitionManager
 import android.util.Log
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -49,10 +53,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSubscribe: Button
     private lateinit var monitorListContainer: LinearLayout
     private lateinit var cornerMenuButton: FrameLayout
+    private lateinit var mainContent: View
 
     private val serverUrl = BuildConfig.SERVER_URL.ifEmpty { "https://notification-2-sail--MaximumCore.replit.app" }
     private lateinit var apiClient: RegattaApiClient
     private lateinit var deviceId: String
+    private var vibrator: Vibrator? = null
 
     private var fcmToken: String? = null
     private var isUpdatingSettings = false
@@ -91,6 +97,13 @@ class MainActivity : AppCompatActivity() {
         // 1. Initialize our new external components
         apiClient = RegattaApiClient(serverUrl)
         deviceId = DeviceUuidManager.getDeviceId(this)
+        vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = getSystemService(VibratorManager::class.java)
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(VIBRATOR_SERVICE) as Vibrator
+        }
 
         val prefs = getSharedPreferences("UiSettings", MODE_PRIVATE)
         gestureNavigationEnabled = prefs.getBoolean("gestureNav", true)
@@ -101,6 +114,7 @@ class MainActivity : AppCompatActivity() {
         drawerLayout = findViewById(R.id.drawerLayout)
         drawerLayout.setScrimColor(Color.parseColor("#80000000"))
 
+        mainContent = findViewById(R.id.mainContent)
         webView = findViewById(R.id.webview)
         btnSubscribe = findViewById(R.id.btnSubscribe)
         monitorListContainer = findViewById(R.id.monitorListContainer)
@@ -117,6 +131,7 @@ class MainActivity : AppCompatActivity() {
         rebuildMaterialDrawerUi(emptyList())
 
         btnSubscribe.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
             val currentUrl = webView.url ?: return@setOnClickListener
             val token = fcmToken
             if (token == null) {
@@ -253,16 +268,26 @@ class MainActivity : AppCompatActivity() {
                 textSize = 26f
                 setTextColor(accentBlue)
             })
-            setOnClickListener { openNavigationDrawer() }
+            setOnClickListener { 
+                performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                openNavigationDrawer() 
+            }
         }
         rootView.addView(cornerMenuButton)
     }
 
     private fun setupDrawerAnimationListener() {
+        var lastSlideOffset = 0f
         drawerLayout.addDrawerListener(object : DrawerLayout.DrawerListener {
             override fun onDrawerSlide(drawerView: View, slideOffset: Float) {
                 val direction = if (drawerOnRightSide) -1 else 1
                 cornerMenuButton.translationX = drawerView.width * slideOffset * direction
+
+                // Mechanical feel: Tick every 20% of progress
+                if (Math.abs(slideOffset - lastSlideOffset) > 0.2f) {
+                    drawerView.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    lastSlideOffset = slideOffset
+                }
 
                 // Dynamic Alpha for Frosted Glass Effect (0.45 when closed, 0.88 when open)
                 val alphaPercent = 0.45f + (0.43f * slideOffset)
@@ -271,18 +296,19 @@ class MainActivity : AppCompatActivity() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     if (slideOffset > 0.005f) {
                         val blurRadius = slideOffset * 25f
-                        webView.setRenderEffect(RenderEffect.createBlurEffect(blurRadius, blurRadius, Shader.TileMode.CLAMP))
+                        mainContent.setRenderEffect(RenderEffect.createBlurEffect(blurRadius, blurRadius, Shader.TileMode.CLAMP))
                     } else {
-                        webView.setRenderEffect(null)
+                        mainContent.setRenderEffect(null)
                     }
                 }
             }
             override fun onDrawerOpened(drawerView: View) {
+                drawerView.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
                 drawerView.background?.mutate()?.alpha = (0.88f * 255).toInt()
             }
             override fun onDrawerClosed(drawerView: View) {
                 cornerMenuButton.translationX = 0f
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) webView.setRenderEffect(null)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) mainContent.setRenderEffect(null)
                 drawerView.background?.mutate()?.alpha = (0.45f * 255).toInt()
             }
             override fun onDrawerStateChanged(newState: Int) {}
@@ -297,6 +323,7 @@ class MainActivity : AppCompatActivity() {
         navView.background = GradientDrawable().apply {
             setColor(darkBg)
             alpha = (0.45f * 255).toInt()
+            // Make the corner where the button is (Top-Start or Top-End) sharp to avoid gaps
             if (drawerOnRightSide) {
                 cornerRadii = floatArrayOf(radius, radius, 0f, 0f, 0f, 0f, radius, radius)
             } else {
@@ -507,6 +534,7 @@ class MainActivity : AppCompatActivity() {
                 setTextColor(Color.parseColor("#00B4D8"))
                 setPadding(8, 0, 0, 32)
                 setOnClickListener {
+                    it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                     val currentTime = System.currentTimeMillis()
                     if (currentTime - lastTitleClickTime < 500) {
                         titleClickCount++
@@ -541,6 +569,7 @@ class MainActivity : AppCompatActivity() {
                     setTextColor(if (state) accentBlue else grayText)
                     setTypeface(null, if (state) Typeface.BOLD else Typeface.NORMAL)
                     setOnClickListener {
+                        it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                         state = !state
                         setTextColor(if (state) accentBlue else grayText)
                         setTypeface(null, if (state) Typeface.BOLD else Typeface.NORMAL)
@@ -578,6 +607,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             headerRegattasLayout.setOnClickListener {
+                it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                 triggerFastTransition(monitorListContainer)
                 regattasCardExpanded = !regattasCardExpanded
                 bodyRegattasLayout.isVisible = regattasCardExpanded
@@ -639,6 +669,7 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     itemContainer.setOnClickListener {
+                        it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                         webView.loadUrl(regattaUrl)
                         triggerFastTransition(monitorListContainer)
                         layoutDropdown.isVisible = !layoutDropdown.isVisible
@@ -671,18 +702,28 @@ class MainActivity : AppCompatActivity() {
                     var holdAnimator: ValueAnimator? = null
                     var isTouchCancelled = false
 
-                    btnDeleteContainer.setOnTouchListener { _, event ->
+                    btnDeleteContainer.setOnTouchListener { v, event ->
                         when (event.action) {
                             MotionEvent.ACTION_DOWN -> {
+                                v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                                 isTouchCancelled = false
                                 txtDelete.text = "Deleting..."
                                 txtDelete.setTextColor(Color.WHITE)
                                 holdAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
                                     duration = 1000
-                                    addUpdateListener { anim -> progressView.scaleX = anim.animatedValue as Float }
+                                    addUpdateListener { anim -> 
+                                        val progress = anim.animatedValue as Float
+                                        progressView.scaleX = progress
+                                        
+                                        // Increasing vibration intensity
+                                        val amplitude = (progress * 255).toInt().coerceAtLeast(1)
+                                        vibrator?.vibrate(VibrationEffect.createOneShot(20, amplitude))
+                                    }
                                     addListener(object : AnimatorListenerAdapter() {
                                         override fun onAnimationEnd(animation: Animator) {
                                             if (!isTouchCancelled && progressView.scaleX >= 0.95f) {
+                                                val haptic = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.LONG_PRESS
+                                                v.performHapticFeedback(haptic)
                                                 executeUnsubscribe(regattaUrl)
                                             }
                                         }
@@ -741,6 +782,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             headerSettingsLayout.setOnClickListener {
+                it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                 triggerFastTransition(monitorListContainer)
                 settingsCardExpanded = !settingsCardExpanded
                 bodySettingsLayout.isVisible = settingsCardExpanded
@@ -778,7 +820,8 @@ class MainActivity : AppCompatActivity() {
                 thumbTintList = android.content.res.ColorStateList.valueOf(accentBlue)
                 trackTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#334155"))
                 setPadding(0, 16, 0, 16)
-                setOnCheckedChangeListener { _, isChecked1 ->
+                setOnCheckedChangeListener { buttonView, isChecked1 ->
+                    buttonView.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                     gestureNavigationEnabled = isChecked1
                     getSharedPreferences("UiSettings", MODE_PRIVATE).edit { putBoolean("gestureNav", isChecked1) }
                     applyDrawerConfiguration()
@@ -800,7 +843,8 @@ class MainActivity : AppCompatActivity() {
                 isChecked = drawerOnRightSide
                 thumbTintList = android.content.res.ColorStateList.valueOf(accentBlue)
                 trackTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#334155"))
-                setOnCheckedChangeListener { _, isChecked1 ->
+                setOnCheckedChangeListener { buttonView, isChecked1 ->
+                    buttonView.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                     drawerOnRightSide = isChecked1
                     txtSideLabel.text = if (isChecked1) "Menu Side: Right" else "Menu Side: Left"
                     getSharedPreferences("UiSettings", MODE_PRIVATE).edit { putBoolean("drawerRight", isChecked1) }

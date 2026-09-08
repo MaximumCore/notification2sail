@@ -194,12 +194,32 @@ class MainActivity : AppCompatActivity() {
     private fun setupWebViewConfiguration() {
         webView.overScrollMode = View.OVER_SCROLL_NEVER
         webView.isHorizontalScrollBarEnabled = false
-        webView.settings.javaScriptEnabled = true
-        webView.settings.domStorageEnabled = true
+        
+        webView.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            useWideViewPort = true
+            loadWithOverviewMode = true
+            builtInZoomControls = false
+            displayZoomControls = false
+            setSupportZoom(false)
+        }
 
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
+                
+                // Inject CSS/Meta to prevent horizontal scrolling
+                view?.loadUrl("javascript:(function() { " +
+                        "var meta = document.createElement('meta');" +
+                        "meta.name = 'viewport';" +
+                        "meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';" +
+                        "var head = document.getElementsByTagName('head')[0];" +
+                        "if (head) head.appendChild(meta);" +
+                        "document.body.style.overflowX = 'hidden';" +
+                        "document.documentElement.style.overflowX = 'hidden';" +
+                        "})()")
+
                 if (url != null && url.contains("manage2sail.com/") && url.contains("/event/")) {
                     btnSubscribe.isVisible = true
                     checkSubscriptionStatus(url)

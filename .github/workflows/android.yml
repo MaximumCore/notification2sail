@@ -1,0 +1,38 @@
+name: Android Build
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch: # Das hier erlaubt den manuellen Start!
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Restore google-services.json
+        env:
+          GOOGLE_SERVICES_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: echo "$GOOGLE_SERVICES_BASE64" | tr -d '\r\n ' | base64 --decode > app/google-services.json
+      - name: Create local.properties
+        env:
+          SERVER_URL: ${{ secrets.SERVER_URL }}
+        run: echo "SERVER_URL=$SERVER_URL" > local.properties
+      - name: Build with Gradle
+        run: |
+          gradle wrapper --gradle-version 8.6
+          chmod +x gradlew
+          ./gradlew assembleDebug
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-apk
+          path: app/build/outputs/apk/debug/*.apk

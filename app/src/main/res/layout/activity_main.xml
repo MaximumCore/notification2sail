@@ -48,37 +48,20 @@
         android:layout_width="320dp"
         android:layout_height="match_parent"
         android:layout_gravity="start"
-        android:background="#151515">
+        android:background="@android:color/transparent">
 
-        <LinearLayout
+        <ScrollView
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:padding="24dp">
+            android:fillViewport="true"
+            android:overScrollMode="never">
 
-            <TextView
-                android:id="@+id/txtDrawerTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="My Regattas"
-                android:textSize="22sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="16dp"
-                android:textColor="#FFFFFF"/>
-
-            <ScrollView
+            <LinearLayout
+                android:id="@+id/monitorListContainer"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent">
-                
-                <LinearLayout
-                    android:id="@+id/monitorListContainer"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
-                </LinearLayout>
-            </ScrollView>
-
-        </LinearLayout>
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </ScrollView>
     </com.google.android.material.navigation.NavigationView>
 
 </androidx.drawerlayout.widget.DrawerLayout>

@@ -104,7 +104,7 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webview)
         btnSubscribe = findViewById(R.id.btnSubscribe)
         monitorListContainer = findViewById(R.id.monitorListContainer)
-        monitorListContainer.setBackgroundColor(Color.parseColor("#121212"))
+        monitorListContainer.setBackgroundColor(Color.TRANSPARENT)
 
         setupWebViewConfiguration()
         setupCornerTriggerButton()
@@ -115,7 +115,6 @@ class MainActivity : AppCompatActivity() {
         setupOnBackPressedDispatcher()
 
         rebuildMaterialDrawerUi(emptyList())
-        hideOldXmlTitles()
 
         btnSubscribe.setOnClickListener {
             val currentUrl = webView.url ?: return@setOnClickListener
@@ -189,10 +188,6 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    private fun hideOldXmlTitles() {
-        findViewById<TextView>(R.id.txtDrawerTitle)?.isVisible = false
-    }
-
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebViewConfiguration() {
         webView.overScrollMode = View.OVER_SCROLL_NEVER
@@ -235,22 +230,28 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupCornerTriggerButton() {
         val rootView = findViewById<ViewGroup>(android.R.id.content)
+        val darkBg = Color.parseColor("#121212")
+        val accentBlue = Color.parseColor("#00B4D8")
+
         cornerMenuButton = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(140, 140).apply {
                 gravity = if (drawerOnRightSide) Gravity.TOP or Gravity.END else Gravity.TOP or Gravity.START
             }
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                setColor(Color.parseColor("#1A2332"))
-                cornerRadii = if (!drawerOnRightSide) floatArrayOf(0f, 0f, 0f, 0f, 100f, 100f, 0f, 0f) else floatArrayOf(0f, 0f, 0f, 0f, 0f, 0f, 100f, 100f)
+                setColor(darkBg)
+                val r = 64f
+                cornerRadii = if (!drawerOnRightSide) 
+                    floatArrayOf(0f, 0f, 0f, 0f, r, r, 0f, 0f) 
+                    else floatArrayOf(0f, 0f, 0f, 0f, 0f, 0f, r, r)
             }
-            elevation = 12f
+            elevation = 0f
 
             addView(TextView(this@MainActivity).apply {
                 layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.CENTER }
                 text = "☰"
-                textSize = 28f
-                setTextColor(Color.parseColor("#00B4D8"))
+                textSize = 26f
+                setTextColor(accentBlue)
             })
             setOnClickListener { openNavigationDrawer() }
         }
@@ -263,8 +264,12 @@ class MainActivity : AppCompatActivity() {
                 val direction = if (drawerOnRightSide) -1 else 1
                 cornerMenuButton.translationX = drawerView.width * slideOffset * direction
 
+                // Dynamic Alpha for Frosted Glass Effect (0.45 when closed, 0.88 when open)
+                val alphaPercent = 0.45f + (0.43f * slideOffset)
+                drawerView.background?.mutate()?.alpha = (alphaPercent * 255).toInt()
+
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    if (slideOffset > 0.01f) {
+                    if (slideOffset > 0.005f) {
                         val blurRadius = slideOffset * 25f
                         webView.setRenderEffect(RenderEffect.createBlurEffect(blurRadius, blurRadius, Shader.TileMode.CLAMP))
                     } else {
@@ -272,16 +277,33 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
-            override fun onDrawerOpened(drawerView: View) {}
+            override fun onDrawerOpened(drawerView: View) {
+                drawerView.background?.mutate()?.alpha = (0.88f * 255).toInt()
+            }
             override fun onDrawerClosed(drawerView: View) {
                 cornerMenuButton.translationX = 0f
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) webView.setRenderEffect(null)
+                drawerView.background?.mutate()?.alpha = (0.45f * 255).toInt()
             }
             override fun onDrawerStateChanged(newState: Int) {}
         })
     }
 
     private fun applyDrawerConfiguration() {
+        val navView = findViewById<View>(R.id.navigationView)
+        val darkBg = Color.parseColor("#121212")
+        val radius = 80f // Stronger rounding for the sheet
+
+        navView.background = GradientDrawable().apply {
+            setColor(darkBg)
+            alpha = (0.45f * 255).toInt()
+            if (drawerOnRightSide) {
+                cornerRadii = floatArrayOf(radius, radius, 0f, 0f, 0f, 0f, radius, radius)
+            } else {
+                cornerRadii = floatArrayOf(0f, 0f, radius, radius, radius, radius, 0f, 0f)
+            }
+        }
+
         for (i in 0 until drawerLayout.childCount) {
             val child = drawerLayout.getChildAt(i)
             val params = child.layoutParams
@@ -301,7 +323,10 @@ class MainActivity : AppCompatActivity() {
         cornerMenuButton.layoutParams = btnParams
 
         val shape = cornerMenuButton.background as GradientDrawable
-        shape.cornerRadii = if (!drawerOnRightSide) floatArrayOf(0f, 0f, 0f, 0f, 100f, 100f, 0f, 0f) else floatArrayOf(0f, 0f, 0f, 0f, 0f, 0f, 100f, 100f)
+        val r = 64f
+        shape.cornerRadii = if (!drawerOnRightSide) 
+            floatArrayOf(0f, 0f, 0f, 0f, r, r, 0f, 0f) 
+            else floatArrayOf(0f, 0f, 0f, 0f, 0f, 0f, r, r)
     }
 
     private fun openNavigationDrawer() { drawerLayout.openDrawer(if (drawerOnRightSide) GravityCompat.END else GravityCompat.START) }
@@ -473,15 +498,11 @@ class MainActivity : AppCompatActivity() {
     private fun rebuildMaterialDrawerUi(monitors: List<Regatta>) {
         try {
             monitorListContainer.removeAllViews()
-
-            val paddingWrapper = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(32, 48, 32, 32)
-            }
+            monitorListContainer.setPadding(32, 140, 32, 32) // Top padding matches button height
 
             val titleApp = TextView(this).apply {
                 text = "notification2sail"
-                textSize = 24f
+                textSize = 22f
                 setTypeface(null, Typeface.BOLD)
                 setTextColor(Color.parseColor("#00B4D8"))
                 setPadding(8, 0, 0, 32)
@@ -504,7 +525,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
-            paddingWrapper.addView(titleApp)
+            monitorListContainer.addView(titleApp)
 
             val cardBackgroundDark = Color.parseColor("#1A2332")
             val accentBlue = Color.parseColor("#00B4D8")
@@ -690,7 +711,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             cardRegattas.addView(bodyRegattasLayout)
-            paddingWrapper.addView(cardRegattas)
+            monitorListContainer.addView(cardRegattas)
 
             val cardSettings = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -791,9 +812,7 @@ class MainActivity : AppCompatActivity() {
             bodySettingsLayout.addView(layoutPositionToggle)
 
             cardSettings.addView(bodySettingsLayout)
-            paddingWrapper.addView(cardSettings)
-
-            monitorListContainer.addView(ScrollView(this).apply { addView(paddingWrapper) })
+            monitorListContainer.addView(cardSettings)
         } catch (e: Exception) {
             e.printStackTrace()
         }

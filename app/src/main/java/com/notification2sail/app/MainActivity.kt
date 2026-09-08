@@ -692,11 +692,11 @@ class MainActivity : AppCompatActivity() {
                 setPadding(0, 0, 0, 8)
             })
 
-            val togDet = createTextToggle("• Details Changelog", prefDetails) { state -> prefDetails = state; saveUserSettings() }
-            val togCla = createTextToggle("• Class System Updates", prefClasses) { state -> prefClasses = state; saveUserSettings() }
-            val togEnt = createTextToggle("• Entry/Registration Feeds", prefEntries) { state -> prefEntries = state; saveUserSettings() }
-            val togRes = createTextToggle("• Results & Scores", prefResults) { state -> prefResults = state; saveUserSettings() }
-            val togNot = createTextToggle("• Official Notice Board", prefNoticeBoard) { state -> prefNoticeBoard = state; saveUserSettings() }
+            val togDet = createTextToggle("Details", prefDetails) { state -> prefDetails = state; saveUserSettings() }
+            val togCla = createTextToggle("Classes", prefClasses) { state -> prefClasses = state; saveUserSettings() }
+            val togEnt = createTextToggle("Entries", prefEntries) { state -> prefEntries = state; saveUserSettings() }
+            val togRes = createTextToggle("Results", prefResults) { state -> prefResults = state; saveUserSettings() }
+            val togNot = createTextToggle("Notice Board", prefNoticeBoard) { state -> prefNoticeBoard = state; saveUserSettings() }
 
             bodySettingsLayout.addView(togDet)
             bodySettingsLayout.addView(togCla)

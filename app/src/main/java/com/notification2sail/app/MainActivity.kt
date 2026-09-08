@@ -73,6 +73,9 @@ class MainActivity : AppCompatActivity() {
     private var touchY1 = 0f
     private val minSwipeDistance = 150
 
+    private var titleClickCount = 0
+    private var lastTitleClickTime = 0L
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
@@ -482,6 +485,24 @@ class MainActivity : AppCompatActivity() {
                 setTypeface(null, Typeface.BOLD)
                 setTextColor(Color.parseColor("#00B4D8"))
                 setPadding(8, 0, 0, 32)
+                setOnClickListener {
+                    val currentTime = System.currentTimeMillis()
+                    if (currentTime - lastTitleClickTime < 500) {
+                        titleClickCount++
+                    } else {
+                        titleClickCount = 1
+                    }
+                    lastTitleClickTime = currentTime
+
+                    if (titleClickCount == 7) {
+                        titleClickCount = 0
+                        val token = fcmToken
+                        if (token != null) {
+                            Toast.makeText(this@MainActivity, "Test notification in 60 seconds", Toast.LENGTH_LONG).show()
+                            apiClient.executeServerDelayedPush(token) { }
+                        }
+                    }
+                }
             }
             paddingWrapper.addView(titleApp)
 
@@ -769,27 +790,6 @@ class MainActivity : AppCompatActivity() {
             layoutPositionToggle.addView(switchSide)
             bodySettingsLayout.addView(layoutPositionToggle)
 
-            val btnTestPush = Button(this).apply {
-                text = "Send Test Notification"
-                textSize = 14f
-                setTextColor(accentBlue)
-                isAllCaps = false
-                background = GradientDrawable().apply { cornerRadius = 32f; setColor(Color.parseColor("#1E293B")) }
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 32, 0, 0) }
-
-                setOnClickListener {
-                    text = "Request Sent!"
-                    isEnabled = false
-                    val token = fcmToken ?: return@setOnClickListener
-                    apiClient.executeServerDelayedPush(token) {
-                        Handler(Looper.getMainLooper()).postDelayed({
-                            text = "Send Test Notification"
-                            isEnabled = true
-                        }, 2000)
-                    }
-                }
-            }
-            bodySettingsLayout.addView(btnTestPush)
             cardSettings.addView(bodySettingsLayout)
             paddingWrapper.addView(cardSettings)
 

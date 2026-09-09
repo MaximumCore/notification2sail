@@ -51,18 +51,43 @@
         android:layout_gravity="start"
         android:background="@android:color/transparent">
 
-        <ScrollView
+        <RelativeLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:fillViewport="true"
-            android:overScrollMode="never">
+            android:layout_height="match_parent">
 
-            <LinearLayout
-                android:id="@+id/monitorListContainer"
+            <ScrollView
+                android:id="@+id/drawerScrollView"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
-        </ScrollView>
+                android:layout_height="match_parent"
+                android:fillViewport="true"
+                android:overScrollMode="never"
+                android:clipToPadding="false"
+                android:paddingTop="70dp"
+                android:paddingBottom="100dp">
+
+                <LinearLayout
+                    android:id="@+id/monitorListContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </ScrollView>
+
+            <!-- Top Fading Blur -->
+            <View
+                android:id="@+id/drawerTopBlur"
+                android:layout_width="match_parent"
+                android:layout_height="80dp"
+                android:layout_alignParentTop="true" />
+
+            <!-- Bottom Fading Blur -->
+            <View
+                android:id="@+id/drawerBottomBlur"
+                android:layout_width="match_parent"
+                android:layout_height="100dp"
+                android:layout_alignParentBottom="true" />
+
+        </RelativeLayout>
+
     </com.google.android.material.navigation.NavigationView>
 
 </androidx.drawerlayout.widget.DrawerLayout>

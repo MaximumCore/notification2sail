@@ -11,6 +11,7 @@ import android.graphics.Color
 import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
@@ -83,6 +84,7 @@ class MainActivity : AppCompatActivity() {
     private var lastTitleClickTime = 0L
 
     private var currentMonitors: List<Regatta> = emptyList()
+    private var expandedRegattaUrl: String? = null
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -251,7 +253,7 @@ class MainActivity : AppCompatActivity() {
         val accentBlue = Color.parseColor("#00B4D8")
 
         cornerMenuButton = FrameLayout(this).apply {
-            layoutParams = FrameLayout.LayoutParams(140, 140).apply {
+            layoutParams = FrameLayout.LayoutParams(240, 140).apply {
                 gravity = if (drawerOnRightSide) Gravity.TOP or Gravity.END else Gravity.TOP or Gravity.START
             }
             background = GradientDrawable().apply {
@@ -264,12 +266,20 @@ class MainActivity : AppCompatActivity() {
             }
             elevation = 0f
 
-            addView(TextView(this@MainActivity).apply {
-                layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.CENTER }
-                text = "☰"
-                textSize = 26f
-                setTextColor(accentBlue)
+            addView(FrameLayout(this@MainActivity).apply {
+                layoutParams = FrameLayout.LayoutParams(140, 140).apply { 
+                    // Extension logic: if drawer is on LEFT, icon should be at the RIGHT of the wide button
+                    // so the extra width extends to the LEFT (under the drawer).
+                    gravity = if (drawerOnRightSide) Gravity.START else Gravity.END 
+                }
+                addView(TextView(this@MainActivity).apply {
+                    layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.CENTER }
+                    text = "☰"
+                    textSize = 26f
+                    setTextColor(accentBlue)
+                })
             })
+
             setOnClickListener { 
                 performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                 openNavigationDrawer() 
@@ -312,6 +322,12 @@ class MainActivity : AppCompatActivity() {
                 cornerMenuButton.translationX = 0f
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) mainContent.setRenderEffect(null)
                 drawerView.background?.mutate()?.alpha = (0.45f * 255).toInt()
+                
+                // Reset expanded regattas when closed
+                if (expandedRegattaUrl != null) {
+                    expandedRegattaUrl = null
+                    rebuildMaterialDrawerUi(currentMonitors)
+                }
             }
             override fun onDrawerStateChanged(newState: Int) {}
         })
@@ -320,18 +336,33 @@ class MainActivity : AppCompatActivity() {
     private fun applyDrawerConfiguration() {
         val navView = findViewById<View>(R.id.navigationView)
         val darkBg = Color.parseColor("#121212")
-        val radius = 80f // Stronger rounding for the sheet
+        val radius = 80f
 
-        navView.background = GradientDrawable().apply {
+        // The RelativeLayout is the first and only child of NavigationView
+        val drawerContent = (navView as ViewGroup).getChildAt(0)
+        drawerContent.background = GradientDrawable().apply {
             setColor(darkBg)
-            alpha = (0.45f * 255).toInt()
-            // Make the corner where the button is (Top-Start or Top-End) sharp to avoid gaps
+            alpha = (0.88f * 255).toInt()
+            // Round only the "inner" corners based on drawer side
             if (drawerOnRightSide) {
                 cornerRadii = floatArrayOf(radius, radius, 0f, 0f, 0f, 0f, radius, radius)
             } else {
                 cornerRadii = floatArrayOf(0f, 0f, radius, radius, radius, radius, 0f, 0f)
             }
         }
+        drawerContent.clipToOutline = true
+
+        navView.background = ColorDrawable(Color.TRANSPARENT)
+
+        findViewById<View>(R.id.drawerTopBlur).background = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(darkBg, Color.TRANSPARENT)
+        ).apply { alpha = (0.88f * 255).toInt() }
+
+        findViewById<View>(R.id.drawerBottomBlur).background = GradientDrawable(
+            GradientDrawable.Orientation.BOTTOM_TOP,
+            intArrayOf(darkBg, Color.TRANSPARENT)
+        ).apply { alpha = (0.88f * 255).toInt() }
 
         for (i in 0 until drawerLayout.childCount) {
             val child = drawerLayout.getChildAt(i)
@@ -347,15 +378,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
         drawerLayout.setDrawerLockMode(if (!gestureNavigationEnabled) DrawerLayout.LOCK_MODE_LOCKED_CLOSED else DrawerLayout.LOCK_MODE_UNLOCKED)
+        
+        cornerMenuButton.isVisible = !gestureNavigationEnabled
+
         val btnParams = cornerMenuButton.layoutParams as FrameLayout.LayoutParams
         btnParams.gravity = if (drawerOnRightSide) Gravity.TOP or Gravity.END else Gravity.TOP or Gravity.START
         cornerMenuButton.layoutParams = btnParams
 
-        val shape = cornerMenuButton.background as GradientDrawable
-        val r = 64f
-        shape.cornerRadii = if (!drawerOnRightSide) 
-            floatArrayOf(0f, 0f, 0f, 0f, r, r, 0f, 0f) 
-            else floatArrayOf(0f, 0f, 0f, 0f, 0f, 0f, r, r)
+        val iconWrapper = cornerMenuButton.getChildAt(0) as FrameLayout
+        val iconParams = iconWrapper.layoutParams as FrameLayout.LayoutParams
+        iconParams.gravity = if (drawerOnRightSide) Gravity.START else Gravity.END
+        iconWrapper.layoutParams = iconParams
     }
 
     private fun openNavigationDrawer() { drawerLayout.openDrawer(if (drawerOnRightSide) GravityCompat.END else GravityCompat.START) }
@@ -422,6 +455,52 @@ class MainActivity : AppCompatActivity() {
                 loadUserSettings()
             }
         }
+    }
+
+    private fun sortMonitors(monitors: List<Regatta>): List<Regatta> {
+        val now = Calendar.getInstance().time
+        
+        val past = mutableListOf<Regatta>()
+        val active = mutableListOf<Regatta>()
+        val future = mutableListOf<Regatta>()
+
+        for (monitor in monitors) {
+            val start = parseStartDate(monitor)
+            val end = parseEndDate(monitor)
+            
+            when {
+                end != null && now.after(end) -> past.add(monitor)
+                start != null && now.after(start) -> active.add(monitor)
+                else -> future.add(monitor)
+            }
+        }
+
+        active.sortBy { parseEndDate(it)?.time ?: Long.MAX_VALUE }
+        future.sortBy { parseStartDate(it)?.time ?: Long.MAX_VALUE }
+        past.sortByDescending { parseEndDate(it)?.time ?: 0L }
+        
+        return active + future + past
+    }
+
+    private fun parseEndDate(monitor: Regatta): Date? {
+        val dateString = monitor.endDate ?: monitor.dateLegacy ?: ""
+        return tryParseDate(dateString)
+    }
+    
+    private fun parseStartDate(monitor: Regatta): Date? {
+        return tryParseDate(monitor.startDate ?: "")
+    }
+
+    private fun tryParseDate(dateStr: String): Date? {
+        if (dateStr.isEmpty() || dateStr == "null") return null
+        val formats = listOf(
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") },
+            SimpleDateFormat("dd/MM/yyyy", Locale.UK)
+        )
+        for (format in formats) {
+            try { return format.parse(dateStr) } catch (_: Exception) {}
+        }
+        return null
     }
 
     private fun extractRegattaName(url: String): String {
@@ -537,7 +616,9 @@ class MainActivity : AppCompatActivity() {
     private fun rebuildMaterialDrawerUi(monitors: List<Regatta>) {
         try {
             monitorListContainer.removeAllViews()
-            monitorListContainer.setPadding(32, 140, 32, 32) // Top padding matches button height
+            monitorListContainer.setPadding(32, 10, 32, 80) // Reduced top padding to move title up
+
+            val sortedMonitors = sortMonitors(monitors)
 
             val titleApp = TextView(this).apply {
                 text = "notification2sail"
@@ -546,7 +627,6 @@ class MainActivity : AppCompatActivity() {
                 setTextColor(Color.parseColor("#00B4D8"))
                 setPadding(8, 0, 0, 32)
                 setOnClickListener {
-                    it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                     val currentTime = System.currentTimeMillis()
                     if (currentTime - lastTitleClickTime < 500) {
                         titleClickCount++
@@ -625,7 +705,7 @@ class MainActivity : AppCompatActivity() {
                 bodyRegattasLayout.isVisible = regattasCardExpanded
             }
 
-            if (monitors.isEmpty()) {
+            if (sortedMonitors.isEmpty()) {
                 bodyRegattasLayout.addView(TextView(this).apply {
                     text = "No active subscriptions."
                     textSize = 13f
@@ -633,20 +713,24 @@ class MainActivity : AppCompatActivity() {
                     setPadding(8, 12, 0, 0)
                 })
             } else {
-                val currentWebUrl = getCleanBaseUrl(webView.url ?: "")
-                for (monitor in monitors) {
+                val now = Calendar.getInstance().time
+
+                for (monitor in sortedMonitors) {
                     val regattaUrl = monitor.url
-                    val startDate = monitor.startDate ?: ""
-                    val endDate = monitor.endDate ?: ""
+                    val startDateStr = monitor.startDate ?: ""
+                    val endDateStr = monitor.endDate ?: ""
                     val dateLegacy = monitor.dateLegacy ?: ""
 
-                    val displayDate = if (startDate.isNotEmpty() || endDate.isNotEmpty()) {
-                        formatRegattaDate(startDate, endDate)
+                    val displayDate = if (startDateStr.isNotEmpty() || endDateStr.isNotEmpty()) {
+                        formatRegattaDate(startDateStr, endDateStr)
                     } else if (dateLegacy.isNotEmpty() && dateLegacy != "null") {
                         dateLegacy
                     } else {
                         ""
                     }
+
+                    val endDate = parseEndDate(monitor)
+                    val isPast = endDate != null && now.after(endDate)
 
                     var displayName = monitor.name ?: ""
                     if (displayName.isEmpty() || displayName == "null") displayName = extractRegattaName(regattaUrl)
@@ -657,34 +741,58 @@ class MainActivity : AppCompatActivity() {
                         orientation = LinearLayout.VERTICAL
                         setPadding(24, 24, 24, 24)
                         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 12, 0, 12) }
-                        background = GradientDrawable().apply { cornerRadius = 36f; setColor(if (isLiveNow) Color.parseColor("#1E3A2F") else Color.parseColor("#222A35")) }
+                        
+                        val bgColor = when {
+                            isPast -> Color.parseColor("#1A1A1A")
+                            isLiveNow -> Color.parseColor("#1E3A2F")
+                            else -> Color.parseColor("#222A35")
+                        }
+                        background = GradientDrawable().apply { cornerRadius = 36f; setColor(bgColor) }
+                        alpha = if (isPast) 0.5f else 1.0f
                     }
 
                     val layoutDropdown = LinearLayout(this).apply {
                         orientation = LinearLayout.VERTICAL
                         setPadding(16, 8, 16, 8)
-                        isVisible = currentWebUrl.contains(regattaUrl)
+                        isVisible = (expandedRegattaUrl == regattaUrl)
                     }
 
                     val txtRegatta = TextView(this).apply {
                         text = displayName
                         textSize = 15f
                         setTypeface(null, Typeface.BOLD)
-                        setTextColor(if (isLiveNow) Color.parseColor("#4EDD99") else whiteText)
+                        val tColor = when {
+                            isPast -> Color.parseColor("#666666")
+                            isLiveNow -> Color.parseColor("#4EDD99")
+                            else -> whiteText
+                        }
+                        setTextColor(tColor)
                     }
 
                     val txtRegattaDate = TextView(this).apply {
                         text = displayDate.ifEmpty { "No date provided" }
                         textSize = 12f
-                        setTextColor(if (isLiveNow) Color.parseColor("#8CE0B6") else Color.parseColor("#94A3B8"))
+                        val dColor = when {
+                            isPast -> Color.parseColor("#444444")
+                            isLiveNow -> Color.parseColor("#8CE0B6")
+                            else -> Color.parseColor("#94A3B8")
+                        }
+                        setTextColor(dColor)
                         setPadding(0, 4, 0, 0)
                     }
 
                     itemContainer.setOnClickListener {
                         it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                        webView.loadUrl(regattaUrl)
+                        
+                        if (expandedRegattaUrl == regattaUrl) {
+                            expandedRegattaUrl = null
+                        } else {
+                            expandedRegattaUrl = regattaUrl
+                            webView.loadUrl(regattaUrl)
+                        }
+                        
                         triggerFastTransition(monitorListContainer)
-                        layoutDropdown.isVisible = !layoutDropdown.isVisible
+                        rebuildMaterialDrawerUi(monitors)
                     }
 
                     val btnDeleteContainer = FrameLayout(this).apply {
@@ -727,9 +835,9 @@ class MainActivity : AppCompatActivity() {
                                         val progress = anim.animatedValue as Float
                                         progressView.scaleX = progress
                                         
-                                        // Increasing vibration intensity
-                                        val amplitude = (progress * 255).toInt().coerceAtLeast(1)
-                                        vibrator?.vibrate(VibrationEffect.createOneShot(20, amplitude))
+                                        // Light and soft vibration (longer but lower amplitude)
+                                        val amplitude = (progress * 100).toInt().coerceAtLeast(1)
+                                        vibrator?.vibrate(VibrationEffect.createOneShot(40, amplitude))
                                     }
                                     addListener(object : AnimatorListenerAdapter() {
                                         override fun onAnimationEnd(animation: Animator) {

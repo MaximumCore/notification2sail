@@ -62,6 +62,28 @@ class RegattaApiClient(private val serverUrl: String) {
         })
     }
 
+    fun executeRegister(token: String, deviceId: String, urls: List<String>, onResponse: (success: Boolean, errorMsg: String?) -> Unit) {
+        val json = JSONObject().apply {
+            put("fcmToken", token)
+            put("deviceId", deviceId)
+            put("urls", JSONArray(urls))
+        }
+        val body = json.toString().toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+        val request = Request.Builder().url("$serverUrl/api/register").post(body).build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                postOnMain { onResponse(false, "OFFLINE") }
+            }
+            override fun onResponse(call: Call, response: Response) {
+                postOnMain {
+                    if (response.isSuccessful) onResponse(true, null)
+                    else onResponse(false, "ERROR: ${response.code}")
+                }
+            }
+        })
+    }
+
     fun executeSubscribe(url: String, token: String, deviceId: String, pageTitle: String, onResponse: (success: Boolean, errorMsg: String?) -> Unit) {
         val cleanUrl = url.split("#!")[0]
         val json = JSONObject().apply {
@@ -86,11 +108,16 @@ class RegattaApiClient(private val serverUrl: String) {
         })
     }
 
-    fun executeUnsubscribe(url: String, token: String, onComplete: () -> Unit) {
+    fun executeUnsubscribe(url: String, token: String, deviceId: String, removeAll: Boolean = false, onComplete: () -> Unit) {
         val cleanUrl = url.split("#!")[0]
         val json = JSONObject().apply {
             put("fcmToken", token)
-            put("url", cleanUrl)
+            put("deviceId", deviceId)
+            if (removeAll) {
+                put("removeAll", true)
+            } else {
+                put("url", cleanUrl)
+            }
         }
         val body = json.toString().toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
         val request = Request.Builder().url("$serverUrl/api/unregister").post(body).build()
@@ -144,9 +171,10 @@ class RegattaApiClient(private val serverUrl: String) {
         })
     }
 
-    fun saveUserSettings(token: String, details: Boolean, classes: Boolean, entries: Boolean, results: Boolean, noticeBoard: Boolean) {
+    fun saveUserSettings(token: String, deviceId: String, details: Boolean, classes: Boolean, entries: Boolean, results: Boolean, noticeBoard: Boolean) {
         val json = JSONObject().apply {
             put("fcmToken", token)
+            put("deviceId", deviceId)
             put("details", details)
             put("classes", classes)
             put("entries", entries)

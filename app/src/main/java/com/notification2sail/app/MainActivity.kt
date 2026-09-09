@@ -82,6 +82,8 @@ class MainActivity : AppCompatActivity() {
     private var titleClickCount = 0
     private var lastTitleClickTime = 0L
 
+    private var currentMonitors: List<Regatta> = emptyList()
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
@@ -408,7 +410,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun fetchFcmToken() {
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            if (task.isSuccessful) { fcmToken = task.result; loadUserSettings() }
+            if (task.isSuccessful) {
+                val newToken = task.result
+                if (fcmToken != null && fcmToken != newToken) {
+                    // Token changed, update server with existing urls
+                    fcmToken = newToken
+                    apiClient.executeRegister(newToken, deviceId, currentMonitors.map { it.url }) { _, _ -> }
+                } else {
+                    fcmToken = newToken
+                }
+                loadUserSettings()
+            }
         }
     }
 
@@ -491,7 +503,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun executeUnsubscribe(url: String) {
         val token = fcmToken ?: return
-        apiClient.executeUnsubscribe(url, token) {
+        apiClient.executeUnsubscribe(url, token, deviceId) {
             loadUserSettings()
             setButtonNotSubscribed()
         }
@@ -501,6 +513,7 @@ class MainActivity : AppCompatActivity() {
         val token = fcmToken ?: return
         apiClient.loadUserSettings(token, deviceId, onResult = { monitors, settings ->
             try {
+                currentMonitors = monitors
                 if (settings != null) {
                     prefDetails = settings.optBoolean("details", true)
                     prefClasses = settings.optBoolean("classes", true)
@@ -514,10 +527,9 @@ class MainActivity : AppCompatActivity() {
                 isUpdatingSettings = false
             } catch (e: Exception) {
                 Log.e("BugHunt", "JSON crash during loading: ${e.message}")
-                rebuildMaterialDrawerUi(emptyList())
             }
         }, onFailure = {
-            rebuildMaterialDrawerUi(emptyList())
+            // Keep existing currentMonitors on failure
         })
     }
 
@@ -865,7 +877,7 @@ class MainActivity : AppCompatActivity() {
     private fun saveUserSettings() {
         val token = fcmToken ?: return
         if (isUpdatingSettings) return
-        apiClient.saveUserSettings(token, prefDetails, prefClasses, prefEntries, prefResults, prefNoticeBoard)
+        apiClient.saveUserSettings(token, deviceId, prefDetails, prefClasses, prefEntries, prefResults, prefNoticeBoard)
     }
 
     private fun setButtonLoading() = updateMainButtonAppearance("LOADING...", "#334155", "#FFFFFF", false)

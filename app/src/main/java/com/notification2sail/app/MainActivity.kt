@@ -253,31 +253,25 @@ class MainActivity : AppCompatActivity() {
         val accentBlue = Color.parseColor("#00B4D8")
 
         cornerMenuButton = FrameLayout(this).apply {
-            layoutParams = FrameLayout.LayoutParams(240, 140).apply {
+            layoutParams = FrameLayout.LayoutParams(140, 140).apply {
                 gravity = if (drawerOnRightSide) Gravity.TOP or Gravity.END else Gravity.TOP or Gravity.START
             }
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 setColor(darkBg)
                 val r = 64f
+                // Back to simple rounded button for the drawer trigger
                 cornerRadii = if (!drawerOnRightSide) 
                     floatArrayOf(0f, 0f, 0f, 0f, r, r, 0f, 0f) 
                     else floatArrayOf(0f, 0f, 0f, 0f, 0f, 0f, r, r)
             }
             elevation = 0f
 
-            addView(FrameLayout(this@MainActivity).apply {
-                layoutParams = FrameLayout.LayoutParams(140, 140).apply { 
-                    // Extension logic: if drawer is on LEFT, icon should be at the RIGHT of the wide button
-                    // so the extra width extends to the LEFT (under the drawer).
-                    gravity = if (drawerOnRightSide) Gravity.START else Gravity.END 
-                }
-                addView(TextView(this@MainActivity).apply {
-                    layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.CENTER }
-                    text = "☰"
-                    textSize = 26f
-                    setTextColor(accentBlue)
-                })
+            addView(TextView(this@MainActivity).apply {
+                layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.CENTER }
+                text = "☰"
+                textSize = 26f
+                setTextColor(accentBlue)
             })
 
             setOnClickListener { 
@@ -336,19 +330,14 @@ class MainActivity : AppCompatActivity() {
     private fun applyDrawerConfiguration() {
         val navView = findViewById<View>(R.id.navigationView)
         val darkBg = Color.parseColor("#121212")
-        val radius = 80f
 
         // The RelativeLayout is the first and only child of NavigationView
         val drawerContent = (navView as ViewGroup).getChildAt(0)
         drawerContent.background = GradientDrawable().apply {
             setColor(darkBg)
             alpha = (0.88f * 255).toInt()
-            // Round only the "inner" corners based on drawer side
-            if (drawerOnRightSide) {
-                cornerRadii = floatArrayOf(radius, radius, 0f, 0f, 0f, 0f, radius, radius)
-            } else {
-                cornerRadii = floatArrayOf(0f, 0f, radius, radius, radius, radius, 0f, 0f)
-            }
+            // Drawer itself is now completely rectangular
+            cornerRadius = 0f
         }
         drawerContent.clipToOutline = true
 
@@ -384,11 +373,6 @@ class MainActivity : AppCompatActivity() {
         val btnParams = cornerMenuButton.layoutParams as FrameLayout.LayoutParams
         btnParams.gravity = if (drawerOnRightSide) Gravity.TOP or Gravity.END else Gravity.TOP or Gravity.START
         cornerMenuButton.layoutParams = btnParams
-
-        val iconWrapper = cornerMenuButton.getChildAt(0) as FrameLayout
-        val iconParams = iconWrapper.layoutParams as FrameLayout.LayoutParams
-        iconParams.gravity = if (drawerOnRightSide) Gravity.START else Gravity.END
-        iconWrapper.layoutParams = iconParams
     }
 
     private fun openNavigationDrawer() { drawerLayout.openDrawer(if (drawerOnRightSide) GravityCompat.END else GravityCompat.START) }
@@ -546,7 +530,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun formatRegattaDate(startIso: String, endIso: String): String {
-        if (startIso.isEmpty() && endIso.isEmpty()) return ""
+        if ((startIso.isEmpty() || startIso == "null") && (endIso.isEmpty() || endIso == "null")) return "Loading dates..."
 
         val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
@@ -738,6 +722,7 @@ class MainActivity : AppCompatActivity() {
                     val isLiveNow = isRegattaActiveToday(displayDate)
 
                     val itemContainer = LinearLayout(this).apply {
+                        tag = regattaUrl
                         orientation = LinearLayout.VERTICAL
                         setPadding(24, 24, 24, 24)
                         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 12, 0, 12) }
@@ -784,15 +769,27 @@ class MainActivity : AppCompatActivity() {
                     itemContainer.setOnClickListener {
                         it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                         
-                        if (expandedRegattaUrl == regattaUrl) {
+                        val wasExpanded = (expandedRegattaUrl == regattaUrl)
+                        
+                        if (wasExpanded) {
                             expandedRegattaUrl = null
                         } else {
                             expandedRegattaUrl = regattaUrl
                             webView.loadUrl(regattaUrl)
                         }
-                        
-                        triggerFastTransition(monitorListContainer)
-                        rebuildMaterialDrawerUi(monitors)
+
+                        // Surgical update to avoid full drawer flicker
+                        for (i in 0 until bodyRegattasLayout.childCount) {
+                            val child = bodyRegattasLayout.getChildAt(i) as? ViewGroup ?: continue
+                            val childDropdown = child.getChildAt(child.childCount - 1) // layoutDropdown is last
+                            val childUrl = child.tag as? String
+                            
+                            val shouldBeVisible = (expandedRegattaUrl == childUrl)
+                            if (childDropdown.isVisible != shouldBeVisible) {
+                                triggerFastTransition(child)
+                                childDropdown.isVisible = shouldBeVisible
+                            }
+                        }
                     }
 
                     val btnDeleteContainer = FrameLayout(this).apply {
